@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LinkGuard Pro — Malicious URL Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<style>
+    :root{
+        --bg-deep:#0a0e17;
+        --bg-panel:#11182b;
+        --line:#1f2b45;
+        --text-main:#e7ecf7;
+        --text-dim:#7e8bab;
+        --accent-safe:#21d07a;
+        --accent-fake:#ff4757;
+        --accent-scan:#3da9fc;
+        --accent-warn:#ffb020;
+        --mono:'JetBrains Mono','Courier New',monospace;
+    }
+
+    *{box-sizing:border-box; margin:0; padding:0;}
+
+    body{
+        font-family:'Inter',Arial,sans-serif;
+        background:
+            radial-gradient(circle at 20% 0%, #132035 0%, transparent 45%),
+            radial-gradient(circle at 80% 100%, #1a1230 0%, transparent 45%),
+            var(--bg-deep);
+        color:var(--text-main);
+        min-height:100vh;
+        padding:30px 16px 60px;
+    }
+
+    .shell{
+        width:100%;
+        max-width:680px;
+        margin:0 auto;
+    }
+
+    .eyebrow{
+        font-family:var(--mono);
+        font-size:12px;
+        letter-spacing:2px;
+        color:var(--accent-scan);
+        text-transform:uppercase;
+        margin-bottom:10px;
+        display:flex;
+        align-items:center;
+        gap:8px;
+    }
+    .eyebrow::before{
+        content:'';
+        width:7px; height:7px;
+        border-radius:50%;
+        background:var(--accent-scan);
+        box-shadow:0 0 0 4px rgba(61,169,252,0.18);
+    }
+
+    h1{
+        font-size:30px;
+        font-weight:700;
+        letter-spacing:-0.5px;
+        margin-bottom:6px;
+    }
+    h1 span{ color:var(--accent-scan); }
+
+    .sub{
+        color:var(--text-dim);
+        font-size:14.5px;
+        margin-bottom:24px;
+        line-height:1.5;
+    }
+
+    /* ---- Tabs ---- */
+    .tabs{
+        display:flex;
+        gap:6px;
+        margin-bottom:14px;
+        background:var(--bg-panel);
+        border:1px solid var(--line);
+        border-radius:11px;
+        padding:5px;
+    }
+    .tab-btn{
+        flex:1;
+        background:transparent;
+        border:none;
+        color:var(--text-dim);
+        font-size:13px;
+        font-weight:600;
+        padding:10px 8px;
+        border-radius:8px;
+        cursor:pointer;
+        transition:.15s;
+    }
+    .tab-btn.active{
+        background:var(--accent-scan);
+        color:#06101f;
+    }
+    .tab-btn:not(.active):hover{ color:var(--text-main); }
+
+    .panel{
+        background:var(--bg-panel);
+        border:1px solid var(--line);
+        border-radius:14px;
+        padding:22px;
+    }
+
+    .tab-content{ display:none; }
+    .tab-content.active{ display:block; }
+
+    /* ---- Single scan ---- */
+    .input-row{ display:flex; gap:10px; }
+
+    input, textarea{
+        flex:1;
+        background:#0c1322;
+        border:1px solid var(--line);
+        color:var(--text-main);
+        font-family:var(--mono);
+        font-size:14px;
+        padding:14px 16px;
+        border-radius:9px;
+        outline:none;
+        transition:border-color .15s;
+        resize:vertical;
+    }
+    input:focus, textarea:focus{ border-color:var(--accent-scan); }
+    input::placeholder, textarea::placeholder{ color:#465174; }
+
+    button.primary{
+        background:var(--accent-scan);
+        color:#06101f;
+        border:none;
+        font-weight:700;
+        font-size:14px;
+        padding:0 22px;
+        border-radius:9px;
+        cursor:pointer;
+        transition:filter .15s, transform .1s;
+        white-space:nowrap;
+    }
+    button.primary:hover{ filter:brightness(1.1); }
+    button.primary:active{ transform:scale(0.97); }
+    button.primary:disabled{ opacity:0.55; cursor:not-allowed; }
+
+    .hint{ margin-top:10px; font-size:12px; color:var(--text-dim); }
+
+    /* ---- Result area ---- */
+    #resultSection{ margin-top:22px; }
+
+    .verdict-card{
+        border-radius:12px;
+        padding:22px;
+        border:1px solid var(--line);
+        animation:rise .25s ease;
+    }
+    @keyframes rise{
+        from{ opacity:0; transform:translateY(6px); }
+        to{ opacity:1; transform:translateY(0); }
+    }
+
+    .verdict-card.safe{ background:rgba(33,208,122,0.07); border-color:rgba(33,208,122,0.35); }
+    .verdict-card.fake{ background:rgba(255,71,87,0.08); border-color:rgba(255,71,87,0.4); }
+    .verdict-card.scanning{ background:#0c1322; }
+
+    .verdict-top{ display:flex; align-items:center; gap:12px; margin-bottom:4px; }
+
+    .verdict-icon{
+        width:38px; height:38px;
+        border-radius:10px;
+        display:flex; align-items:center; justify-content:center;
+        font-size:19px; flex-shrink:0;
+    }
+    .verdict-icon.safe{ background:rgba(33,208,122,0.18); color:var(--accent-safe); }
+    .verdict-icon.fake{ background:rgba(255,71,87,0.18); color:var(--accent-fake); }
+
+    .verdict-title{ font-size:18px; font-weight:700; }
+    .verdict-title.safe{ color:var(--accent-safe); }
+    .verdict-title.fake{ color:var(--accent-fake); }
+
+    .verdict-url{
+        font-family:var(--mono);
+        font-size:12.5px;
+        color:var(--text-dim);
+        margin-bottom:18px;
+        word-break:break-all;
+        padding-left:50px;
+    }
+
+    .score-row{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .score-bar{ flex:1; height:7px; background:#0c1322; border-radius:5px; overflow:hidden; }
+    .score-fill{ height:100%; border-radius:5px; transition:width .5s ease; }
+    .score-fill.safe{ background:var(--accent-safe); }
+    .score-fill.fake{ background:var(--accent-fake); }
+    .score-num{ font-family:var(--mono); font-size:13px; font-weight:700; min-width:48px; text-align:right; }
+
+    .meta-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+    .meta-box{ background:#0c1322; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+    .meta-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:3px; }
+    .meta-value{ font-family:var(--mono); font-size:13px; }
+
+    /* ---- Risk breakdown chart ---- */
+    .breakdown-wrap{ margin-bottom:18px; }
+    .reasons-label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:10px; }
+
+    .bar-row{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        margin-bottom:8px;
+        font-size:12.5px;
+    }
+    .bar-label{
+        width:170px;
+        flex-shrink:0;
+        color:#c7cfe3;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+    }
+    .bar-track{
+        flex:1;
+        height:14px;
+        background:#0c1322;
+        border-radius:5px;
+        overflow:hidden;
+    }
+    .bar-fill{
+        height:100%;
+        border-radius:5px;
+        background:linear-gradient(90deg, var(--accent-warn), var(--accent-fake));
+        transition:width .5s ease;
+    }
+    .bar-pts{
+        width:34px;
+        text-align:right;
+        font-family:var(--mono);
+        color:var(--text-dim);
+        flex-shrink:0;
+    }
+    .reasons-list.empty{ list-style:none; }
+    .reasons-list.empty li{
+        font-size:13.5px;
+        color:var(--accent-safe);
+        display:flex; gap:8px; align-items:center;
+    }
+
+    .action-row{ display:flex; gap:10px; }
+
+    .btn-proceed{
+        background:var(--accent-safe); color:#06101f; border:none;
+        font-weight:700; font-size:13.5px; padding:11px 18px;
+        border-radius:8px; cursor:pointer; flex:1;
+    }
+    .btn-proceed:hover{ filter:brightness(1.08); }
+
+    .btn-block{
+        background:transparent; color:var(--text-dim); border:1px solid var(--line);
+        font-size:13.5px; padding:11px 18px; border-radius:8px; cursor:pointer; flex:1;
+    }
+    .btn-block:hover{ border-color:#465174; color:var(--text-main); }
+
+    .blocked-banner{
+        display:flex; align-items:center; gap:10px;
+        background:rgba(255,71,87,0.12); border:1px solid rgba(255,71,87,0.3);
+        color:var(--accent-fake); font-size:13px; font-weight:600;
+        padding:12px 14px; border-radius:8px;
+    }
+
+    .scan-line{
+        display:flex; align-items:center; gap:12px;
+        color:var(--text-dim); font-family:var(--mono); font-size:13.5px;
+    }
+    .spinner{
+        width:16px; height:16px; border:2px solid var(--line);
+        border-top-color:var(--accent-scan); border-radius:50%;
+        animation:spin .7s linear infinite; flex-shrink:0;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+
+    /* ---- QR tab ---- */
+    .qr-mode-tabs{
+        display:flex;
+        gap:8px;
+        margin-bottom:16px;
+    }
+    .qr-mode-btn{
+        flex:1;
+        background:#0c1322;
+        border:1px solid var(--line);
+        color:var(--text-dim);
+        font-size:12.5px;
+        font-weight:600;
+        padding:9px 8px;
+        border-radius:8px;
+        cursor:pointer;
+        transition:.15s;
+    }
+    .qr-mode-btn.active{
+        border-color:var(--accent-scan);
+        color:var(--accent-scan);
+        background:rgba(61,169,252,0.08);
+    }
+    .qr-mode-panel{ display:none; }
+    .qr-mode-panel.active{ display:block; }
+
+    #qrCameraWrap{
+        position:relative;
+        border-radius:12px;
+        overflow:hidden;
+        border:1px solid var(--line);
+        background:#000;
+    }
+    #qrVideo{
+        width:100%;
+        max-height:360px;
+        display:block;
+        object-fit:cover;
+    }
+
+    .qr-zone{
+        border:2px dashed var(--line);
+        border-radius:12px;
+        padding:30px 20px;
+        text-align:center;
+        cursor:pointer;
+        transition:border-color .15s;
+    }
+    .qr-zone:hover{ border-color:var(--accent-scan); }
+    .qr-zone-icon{ font-size:34px; margin-bottom:10px; }
+    .qr-zone-text{ font-size:14px; color:var(--text-main); margin-bottom:4px; font-weight:600; }
+    .qr-zone-sub{ font-size:12px; color:var(--text-dim); }
+    #qrFileInput{ display:none; }
+    #qrPreviewWrap{ margin-top:16px; text-align:center; display:none; }
+    #qrPreviewWrap img{ max-width:100%; max-height:220px; border-radius:8px; border:1px solid var(--line); }
+    .qr-decoded{
+        margin-top:14px;
+        background:#0c1322;
+        border:1px solid var(--line);
+        border-radius:8px;
+        padding:12px 14px;
+        font-family:var(--mono);
+        font-size:13px;
+        word-break:break-all;
+    }
+
+    /* ---- Bulk tab ---- */
+    .bulk-result-item{
+        display:flex; align-items:center; gap:10px;
+        background:#0c1322; border:1px solid var(--line);
+        border-radius:8px; padding:10px 12px; margin-bottom:8px;
+        font-size:13px;
+    }
+    .bulk-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .bulk-dot.safe{ background:var(--accent-safe); }
+    .bulk-dot.fake{ background:var(--accent-fake); }
+    .bulk-domain{
+        font-family:var(--mono); flex:1; overflow:hidden;
+        text-overflow:ellipsis; white-space:nowrap;
+    }
+    .bulk-score{ font-family:var(--mono); font-size:11.5px; color:var(--text-dim); flex-shrink:0; }
+    .bulk-summary{
+        display:flex; gap:14px; margin-bottom:14px;
+        font-size:13px; color:var(--text-dim);
+    }
+    .bulk-summary b{ color:var(--text-main); }
+
+    /* ---- History panel ---- */
+    .history-panel{
+        margin-top:18px;
+        background:var(--bg-panel);
+        border:1px solid var(--line);
+        border-radius:14px;
+        padding:18px 22px;
+    }
+    .history-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+    .history-title{ font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); }
+    .clear-btn{
+        background:none; border:none; color:var(--text-dim); font-size:12px;
+        cursor:pointer; padding:4px 8px; border-radius:6px; text-decoration:underline;
+    }
+    .clear-btn:hover{ color:var(--accent-fake); }
+    .history-list{ list-style:none; margin-top:10px; display:flex; flex-direction:column; gap:8px; }
+    .history-item{
+        display:flex; align-items:center; gap:10px;
+        background:#0c1322; border:1px solid var(--line);
+        border-radius:8px; padding:9px 12px; font-size:13px;
+    }
+    .history-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .history-dot.safe{ background:var(--accent-safe); }
+    .history-dot.fake{ background:var(--accent-fake); }
+    .history-domain{
+        font-family:var(--mono); flex:1; overflow:hidden;
+        text-overflow:ellipsis; white-space:nowrap; color:var(--text-main);
+    }
+    .history-time{ font-size:11px; color:var(--text-dim); flex-shrink:0; }
+    .history-score{ font-family:var(--mono); font-size:11.5px; color:var(--text-dim); flex-shrink:0; }
+    .history-empty{ color:var(--text-dim); font-size:13px; text-align:center; padding:14px 0; }
+
+    footer{ margin-top:18px; text-align:center; font-size:11.5px; color:#3d4a6b; }
+
+    @media (max-width:480px){
+        .meta-grid{ grid-template-columns:1fr; }
+        .input-row{ flex-direction:column; }
+        .verdict-url{ padding-left:0; margin-top:8px; }
+        .bar-label{ width:110px; font-size:11.5px; }
+        .tabs{ flex-wrap:wrap; }
+        .tab-btn{ flex:1 1 45%; }
+    }
+</style>
+</head>
+<body>
+
+<div class="shell">
+    <div class="eyebrow">Client-side heuristic scan</div>
+    <h1>Link<span>Guard</span> Pro</h1>
+    <p class="sub">Scan URLs for phishing signals — one at a time, in bulk, or straight from a QR code. History is saved on this device.</p>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="single" onclick="switchTab('single')">🔗 Single Scan</button>
+        <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">📋 Bulk Scan</button>
+        <button class="tab-btn" data-tab="qr" onclick="switchTab('qr')">▦ QR Scan</button>
+    </div>
+
+    <div class="panel">
+
+        <!-- SINGLE SCAN TAB -->
+        <div class="tab-content active" id="tab-single">
+            <div class="input-row">
+                <input type="text" id="urlInput" placeholder="example.com or https://example.com/login" autocomplete="off">
+                <button class="primary" id="scanBtn" onclick="checkLink()">Scan</button>
+            </div>
+            <div class="hint">Heuristic checks only — keywords, TLD, subdomain count, HTTPS, DNS lookup. Not a guarantee of safety.</div>
+            <div id="resultSection"></div>
+        </div>
+
+        <!-- BULK SCAN TAB -->
+        <div class="tab-content" id="tab-bulk">
+            <textarea id="bulkInput" rows="6" placeholder="Paste multiple URLs, one per line:&#10;example.com&#10;login-verify-bank.xyz&#10;https://amazon.com"></textarea>
+            <div style="margin-top:10px;">
+                <button class="primary" id="bulkBtn" onclick="checkBulk()" style="width:100%; padding:12px;">Scan All</button>
+            </div>
+            <div class="hint">Each line is scanned independently using the same heuristic rules.</div>
+            <div id="bulkResultSection"></div>
+        </div>
+
+        <!-- QR SCAN TAB -->
+        <div class="tab-content" id="tab-qr">
+            <div class="qr-mode-tabs">
+                <button class="qr-mode-btn active" data-mode="camera" onclick="switchQrMode('camera')">📷 Live Camera</button>
+                <button class="qr-mode-btn" data-mode="upload" onclick="switchQrMode('upload')">🖼 Upload Image</button>
+            </div>
+
+            <!-- Camera mode -->
+            <div id="qr-mode-camera" class="qr-mode-panel active">
+                <div id="qrCameraWrap" style="display:none;">
+                    <video id="qrVideo" autoplay playsinline muted></video>
+                    <canvas id="qrCanvas" style="display:none;"></canvas>
+                </div>
+                <div id="qrCameraStart" class="qr-zone" onclick="startQrCamera()">
+                    <div class="qr-zone-icon">📷</div>
+                    <div class="qr-zone-text">Tap to start camera</div>
+                    <div class="qr-zone-sub">Point your camera at a QR code — it'll be detected automatically</div>
+                </div>
+                <button class="btn-block" id="qrStopBtn" style="width:100%; margin-top:10px; display:none;" onclick="stopQrCamera()">Stop camera</button>
+                <div class="hint" id="qrCameraHint"></div>
+            </div>
+
+            <!-- Upload mode -->
+            <div id="qr-mode-upload" class="qr-mode-panel">
+                <div class="qr-zone" onclick="document.getElementById('qrFileInput').click()">
+                    <div class="qr-zone-icon">▦</div>
+                    <div class="qr-zone-text">Upload a QR code image</div>
+                    <div class="qr-zone-sub">PNG / JPG — the link inside will be extracted and scanned</div>
+                </div>
+                <input type="file" id="qrFileInput" accept="image/*" onchange="handleQrUpload(event)">
+                <div id="qrPreviewWrap">
+                    <img id="qrPreviewImg" alt="QR preview">
+                </div>
+            </div>
+
+            <div id="qrDecodedSection"></div>
+        </div>
+
+    </div>
+
+    <div class="history-panel">
+        <div class="history-head">
+            <div class="history-title">Recent Scans</div>
+            <button class="clear-btn" onclick="clearHistory()">Clear</button>
+        </div>
+        <ul class="history-list" id="historyList">
+            <li class="history-empty">No scans yet — scan a link above to see it here.</li>
+        </ul>
+    </div>
+
+    <footer>Mini-project demo · all checks run in your browser · history stored locally on this device</footer>
+</div>
+
+<script>
+/* ================= STORAGE ================= */
+const STORAGE_KEY = "linkguard_history_v1";
+
+function loadHistory() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveHistory(history) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch {
+        /* storage full or unavailable - fail silently */
+    }
+}
+
+let scanHistory = loadHistory();
+
+/* ================= TABS ================= */
+function switchTab(name) {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+    document.getElementById("tab-" + name).classList.add("active");
+    if (name !== "qr") stopQrCamera();
+}
+
+/* ================= CORE HEURISTIC ENGINE ================= */
+async function analyzeUrl(rawUrl) {
+    let url = rawUrl.trim();
+    if (!url) return null;
+    if (!url.startsWith("http")) url = "https://" + url;
+
+    let domain;
+    try {
+        domain = new URL(url).hostname.toLowerCase();
+    } catch {
+        return { error: "Invalid URL format", url: rawUrl };
+    }
+
+    let score = 0;
+    const findings = []; // { label, points }
+
+    if (!url.startsWith("https://")) {
+        score += 30;
+        findings.push({ label: "No HTTPS encryption", points: 30 });
+    }
+    if (/login|verify|update|free|secure|account/i.test(url)) {
+        score += 20;
+        findings.push({ label: "Suspicious keywords (login/verify/secure)", points: 20 });
+    }
+    if (domain.split(".").length > 3) {
+        score += 20;
+        findings.push({ label: "Too many subdomains", points: 20 });
+    }
+    if (url.length > 60) {
+        score += 15;
+        findings.push({ label: "Unusually long URL", points: 15 });
+    }
+    const suspiciousTLD = [".ru", ".xyz", ".tk", ".ml", ".ga"];
+    if (suspiciousTLD.some(tld => domain.endsWith(tld))) {
+        score += 30;
+        findings.push({ label: "High-risk domain extension", points: 30 });
+    }
+    const brands = ["amazon", "paypal", "google", "facebook", "apple", "microsoft", "bankofamerica", "netflix"];
+    for (const brand of brands) {
+        if (domain.includes(brand) && !domain.endsWith(brand + ".com")) {
+            score += 40;
+            findings.push({ label: `Brand "${brand}" used outside official domain`, points: 40 });
+            break;
+        }
+    }
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) {
+        score += 25;
+        findings.push({ label: "Raw IP address as domain", points: 25 });
+    }
+
+    let ipAddress = "Not available";
+    let country = "Unknown";
+
+    try {
+        const dnsResponse = await fetch("https://dns.google/resolve?name=" + domain);
+        const dnsData = await dnsResponse.json();
+        if (dnsData.Answer && dnsData.Answer.length) {
+            ipAddress = dnsData.Answer[0].data;
+            try {
+                const geoResponse = await fetch("https://ipapi.co/" + ipAddress + "/json/");
+                const geoData = await geoResponse.json();
+                if (geoData && geoData.country_name && !geoData.error) {
+                    country = geoData.country_name;
+                } else {
+                    country = "Lookup unavailable";
+                }
+            } catch {
+                country = "Lookup unavailable";
+            }
+        } else {
+            // NXDOMAIN / no DNS record. Informational only — third-party DNS
+            // APIs can be flaky or rate-limited, so this never adds risk score.
+            ipAddress = "Could not resolve";
+        }
+    } catch {
+        // Network/CORS/rate-limit failure on the DNS lookup itself.
+        // Don't penalize the URL's score for an infrastructure hiccup.
+        ipAddress = "Lookup failed";
+    }
+
+    score = Math.min(score, 100);
+    const isFake = score >= 50;
+
+    return { url, domain, score, isFake, findings, ipAddress, country };
+}
+
+function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+/* ================= SINGLE SCAN ================= */
+async function checkLink() {
+    const btn = document.getElementById("scanBtn");
+    const resultSection = document.getElementById("resultSection");
+    const rawUrl = document.getElementById("urlInput").value.trim();
+
+    if (!rawUrl) { alert("Please enter a URL"); return; }
+
+    btn.disabled = true;
+    resultSection.innerHTML = `
+        <div class="verdict-card scanning">
+            <div class="scan-line"><div class="spinner"></div> Scanning ${escapeHtml(rawUrl)} …</div>
+        </div>`;
+
+    const result = await analyzeUrl(rawUrl);
+    btn.disabled = false;
+
+    if (!result || result.error) {
+        resultSection.innerHTML = `<div class="verdict-card fake"><div class="blocked-banner">⚠ ${result ? escapeHtml(result.error) : "Could not scan this URL"}</div></div>`;
+        return;
+    }
+
+    renderResult(result);
+    addToHistory(result);
+}
+
+function buildResultCardHtml(result) {
+    const { url, domain, score, isFake, findings, ipAddress, country } = result;
+    const cls = isFake ? "fake" : "safe";
+    const icon = isFake ? "✕" : "✓";
+    const title = isFake ? "Blocked — looks malicious" : "Looks safe";
+    const maxPts = findings.length ? Math.max(...findings.map(f => f.points), 1) : 1;
+
+    const breakdownHtml = findings.length
+        ? findings.map(f => `
+            <div class="bar-row">
+                <div class="bar-label">${escapeHtml(f.label)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${(f.points / maxPts) * 100}%"></div></div>
+                <div class="bar-pts">+${f.points}</div>
+            </div>`).join("")
+        : `<ul class="reasons-list empty"><li>✓ No risk signals detected</li></ul>`;
+
+    const safeUrlId = "proceed_" + Math.random().toString(36).slice(2);
+    window[safeUrlId] = url;
+
+    const actionHtml = isFake
+        ? `<div class="blocked-banner">🚫 This link will not be opened automatically. Proceed only if you trust the source.</div>`
+        : `<div class="action-row">
+               <button class="btn-proceed" onclick="window.open(window['${safeUrlId}'], '_blank', 'noopener,noreferrer')">Open site →</button>
+               <button class="btn-block" onclick="this.closest('.verdict-card').remove()">Dismiss</button>
+           </div>`;
+
+    return `
+        <div class="verdict-card ${cls}">
+            <div class="verdict-top">
+                <div class="verdict-icon ${cls}">${icon}</div>
+                <div class="verdict-title ${cls}">${title}</div>
+            </div>
+            <div class="verdict-url">${escapeHtml(domain)}</div>
+
+            <div class="score-row">
+                <div class="score-bar"><div class="score-fill ${cls}" style="width:${score}%"></div></div>
+                <div class="score-num">${score}% risk</div>
+            </div>
+
+            <div class="meta-grid">
+                <div class="meta-box"><div class="meta-label">Resolved IP</div><div class="meta-value">${escapeHtml(ipAddress)}</div></div>
+                <div class="meta-box"><div class="meta-label">Server country</div><div class="meta-value">${escapeHtml(country)}</div></div>
+            </div>
+
+            <div class="breakdown-wrap">
+                <div class="reasons-label">Risk breakdown</div>
+                ${breakdownHtml}
+            </div>
+
+            ${actionHtml}
+        </div>`;
+}
+
+function renderResult(result) {
+    document.getElementById("resultSection").innerHTML = buildResultCardHtml(result);
+}
+
+document.getElementById("urlInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") checkLink();
+});
+
+/* ================= BULK SCAN ================= */
+async function checkBulk() {
+    const btn = document.getElementById("bulkBtn");
+    const section = document.getElementById("bulkResultSection");
+    const lines = document.getElementById("bulkInput").value
+        .split("\n")
+        .map(l => l.trim())
+        .filter(Boolean);
+
+    if (!lines.length) { alert("Paste at least one URL"); return; }
+
+    btn.disabled = true;
+    section.innerHTML = `<div class="hint" style="margin-top:14px;"><div class="scan-line"><div class="spinner"></div> Scanning ${lines.length} links …</div></div>`;
+
+    const results = [];
+    for (const line of lines) {
+        const r = await analyzeUrl(line);
+        if (r && !r.error) {
+            results.push(r);
+            addToHistory(r);
+        }
+        await new Promise(res => setTimeout(res, 150)); // gentle pacing for free DNS/geo APIs
+    }
+    btn.disabled = false;
+
+    const safeCount = results.filter(r => !r.isFake).length;
+    const fakeCount = results.filter(r => r.isFake).length;
+
+    const itemsHtml = results.map(r => {
+        const cls = r.isFake ? "fake" : "safe";
+        return `
+            <div class="bulk-result-item">
+                <span class="bulk-dot ${cls}"></span>
+                <span class="bulk-domain">${escapeHtml(r.domain)}</span>
+                <span class="bulk-score">${r.score}%</span>
+            </div>`;
+    }).join("");
+
+    section.innerHTML = `
+        <div style="margin-top:16px;">
+            <div class="bulk-summary">
+                <span>✅ <b>${safeCount}</b> safe</span>
+                <span>🚫 <b>${fakeCount}</b> flagged</span>
+                <span>📊 <b>${results.length}</b> total</span>
+            </div>
+            ${itemsHtml}
+        </div>`;
+}
+
+/* ================= QR SCAN ================= */
+function switchQrMode(mode) {
+    document.querySelectorAll(".qr-mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    document.querySelectorAll(".qr-mode-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("qr-mode-" + mode).classList.add("active");
+    document.getElementById("qrDecodedSection").innerHTML = "";
+    if (mode !== "camera") stopQrCamera();
+}
+
+let qrStream = null;
+let qrScanLoop = null;
+
+async function startQrCamera() {
+    const hint = document.getElementById("qrCameraHint");
+    hint.textContent = "";
+
+    if (!window.jsQR) {
+        hint.textContent = "QR engine failed to load. Check your connection and reload the page.";
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        hint.textContent = "Camera access isn't supported in this browser.";
+        return;
+    }
+    if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        hint.textContent = "Camera access needs HTTPS. Open this page via its github.io link, not as a local file.";
+        return;
+    }
+
+    try {
+        qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    } catch (err) {
+        hint.textContent = "Camera permission denied or unavailable: " + err.message;
+        return;
+    }
+
+    const video = document.getElementById("qrVideo");
+    video.srcObject = qrStream;
+    document.getElementById("qrCameraWrap").style.display = "block";
+    document.getElementById("qrCameraStart").style.display = "none";
+    document.getElementById("qrStopBtn").style.display = "block";
+
+    video.onloadedmetadata = () => {
+        video.play();
+        qrScanLoop = requestAnimationFrame(scanCameraFrame);
+    };
+}
+
+function scanCameraFrame() {
+    const video = document.getElementById("qrVideo");
+    const canvas = document.getElementById("qrCanvas");
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if (code && code.data) {
+            onQrDetected(code.data);
+            return; // stop the loop, a code was found
+        }
+    }
+    qrScanLoop = requestAnimationFrame(scanCameraFrame);
+}
+
+function stopQrCamera() {
+    if (qrScanLoop) cancelAnimationFrame(qrScanLoop);
+    qrScanLoop = null;
+    if (qrStream) {
+        qrStream.getTracks().forEach(t => t.stop());
+        qrStream = null;
+    }
+    document.getElementById("qrCameraWrap").style.display = "none";
+    document.getElementById("qrCameraStart").style.display = "block";
+    document.getElementById("qrStopBtn").style.display = "none";
+}
+
+function onQrDetected(data) {
+    stopQrCamera();
+    const section = document.getElementById("qrDecodedSection");
+    section.innerHTML = `
+        <div class="qr-decoded">Decoded: ${escapeHtml(data)}</div>
+        <div style="margin-top:12px;">
+            <button class="primary" style="width:100%; padding:12px;" onclick="scanFromQr('${encodeURIComponent(data)}')">Scan this link</button>
+            <button class="btn-block" style="width:100%; margin-top:8px;" onclick="document.getElementById('qrDecodedSection').innerHTML=''; document.getElementById('qrCameraStart').click();">Scan another</button>
+        </div>
+        <div id="qrResultSection"></div>`;
+}
+
+function handleQrUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            document.getElementById("qrPreviewWrap").style.display = "block";
+            document.getElementById("qrPreviewImg").src = e.target.result;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            const decoded = window.jsQR ? jsQR(imageData.data, imageData.width, imageData.height) : null;
+            const section = document.getElementById("qrDecodedSection");
+
+            if (decoded && decoded.data) {
+                section.innerHTML = `
+                    <div class="qr-decoded">Decoded: ${escapeHtml(decoded.data)}</div>
+                    <div style="margin-top:12px;">
+                        <button class="primary" style="width:100%; padding:12px;" onclick="scanFromQr('${encodeURIComponent(decoded.data)}')">Scan this link</button>
+                    </div>
+                    <div id="qrResultSection"></div>`;
+            } else {
+                section.innerHTML = `<div class="blocked-banner" style="margin-top:14px;">⚠ Could not detect a QR code in this image. Try a clearer photo.</div>`;
+            }
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function scanFromQr(encodedUrl) {
+    const url = decodeURIComponent(encodedUrl);
+    const resultDiv = document.getElementById("qrResultSection");
+    resultDiv.innerHTML = `<div class="verdict-card scanning" style="margin-top:14px;"><div class="scan-line"><div class="spinner"></div> Scanning …</div></div>`;
+
+    const result = await analyzeUrl(url);
+    if (!result || result.error) {
+        resultDiv.innerHTML = `<div class="verdict-card fake" style="margin-top:14px;"><div class="blocked-banner">⚠ ${result ? escapeHtml(result.error) : "Could not scan this link"}</div></div>`;
+        return;
+    }
+
+    resultDiv.innerHTML = buildResultCardHtml(result);
+    addToHistory(result);
+}
+
+/* ================= HISTORY ================= */
+function addToHistory(result) {
+    scanHistory.unshift({
+        domain: result.domain,
+        score: result.score,
+        isFake: result.isFake,
+        time: Date.now()
+    });
+    scanHistory = scanHistory.slice(0, 15);
+    saveHistory(scanHistory);
+    renderHistory();
+}
+
+function timeAgo(ts) {
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    return Math.floor(diff / 86400) + "d ago";
+}
+
+function renderHistory() {
+    const list = document.getElementById("historyList");
+    if (!scanHistory.length) {
+        list.innerHTML = `<li class="history-empty">No scans yet — scan a link above to see it here.</li>`;
+        return;
+    }
+    list.innerHTML = scanHistory.map(item => {
+        const cls = item.isFake ? "fake" : "safe";
+        return `
+            <li class="history-item">
+                <span class="history-dot ${cls}"></span>
+                <span class="history-domain">${escapeHtml(item.domain)}</span>
+                <span class="history-time">${timeAgo(item.time)}</span>
+                <span class="history-score">${item.score}% risk</span>
+            </li>`;
+    }).join("");
+}
+
+function clearHistory() {
+    scanHistory = [];
+    saveHistory(scanHistory);
+    renderHistory();
+}
+
+renderHistory();
+</script>
+
+</body>
+</html>
